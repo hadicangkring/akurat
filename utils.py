@@ -22,11 +22,8 @@ def baca_data(file_path):
         return None
 
 
-def log_prediksi(sumber, prediksi, real):
-    """
-    Menyimpan log hasil prediksi ke file prediksi_log.csv
-    """
-    file_path = "prediksi_log.csv"
+def log_prediksi(sumber, prediksi, real, file_path):
+    """Simpan log prediksi ke file berbeda per sumber"""
     status = "✅ Tepat" if prediksi == real else "❌ Meleset"
     entry = {
         "tanggal": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -45,11 +42,7 @@ def log_prediksi(sumber, prediksi, real):
     df.to_csv(file_path, index=False)
 
 
-def ambil_riwayat(n=5):
-    """
-    Mengambil n riwayat terakhir dari prediksi_log.csv
-    """
-    file_path = "prediksi_log.csv"
+def ambil_riwayat(file_path, n=5):
     if not os.path.exists(file_path):
         return None
     df = pd.read_csv(file_path)
