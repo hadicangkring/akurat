@@ -1,6 +1,3 @@
-import numpy as np
-import pandas as pd
-
 def build_markov(data, order=2, alpha=1.0):
     transitions = {}
     sequences = [list(x) for x in data]
