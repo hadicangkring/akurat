@@ -134,9 +134,9 @@ def tampilkan_prediksi(file_name, label, emoji):
         st.markdown(f"**{c}** — {p:.2%}")
 
 # === JALANKAN UNTUK SETIAP FILE ===
-tampilkan_prediksi("data/a.csv", "File A", "📘")
-tampilkan_prediksi("data/b.csv", "File B", "📗")
-tampilkan_prediksi("data/c.csv", "File C", "📙")
+tampilkan_prediksi("data/a.csv", "File A-SD", "📘")
+tampilkan_prediksi("data/b.csv", "File B-SG", "📗")
+tampilkan_prediksi("data/c.csv", "File C-HK", "📙")
 
 # === GABUNGAN SEMUA DATA ===
 st.subheader("🧩 Gabungan Semua Data")
