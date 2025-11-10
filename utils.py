@@ -1,75 +1,76 @@
+# eval_utils.py
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from difflib import SequenceMatcher
 import os
-from datetime import datetime
 
-def baca_data(file_path):
-    if not os.path.exists(file_path):
-        return None
+# === BACA LOG ===
+def load_log(path="data/prediksi_log.csv"):
+    if not os.path.exists(path):
+        return pd.DataFrame()
     try:
-        df = pd.read_csv(file_path, header=None)
-        df = df.dropna(how="all")
-        if df.empty:
-            return None
-        data = []
-        for val in df.values.flatten():
-            if isinstance(val, str) and val.strip() != "":
-                val = val.strip().replace(",", "")
-                for part in val.split():
-                    if part.isdigit():
-                        data.append(part.zfill(6))
-        return data
+        df = pd.read_csv(path)
+        if "prediksi_4digit" in df.columns and "real_4digit" in df.columns:
+            return df
     except Exception:
+        pass
+    return pd.DataFrame()
+
+# === METRIK UTAMA ===
+def exact_match_rate(df):
+    if df.empty: return 0
+    return (df['prediksi_4digit'].astype(str) == df['real_4digit'].astype(str)).mean()
+
+def per_position_accuracy(df):
+    if df.empty: return {}
+    acc = {}
+    for pos in range(4):
+        correct = df.apply(lambda r: str(r['prediksi_4digit']).zfill(4)[pos] == str(r['real_4digit']).zfill(4)[pos], axis=1)
+        acc[f'pos{pos+1}'] = correct.mean()
+    return acc
+
+def avg_similarity(df):
+    if df.empty: return 0
+    return df.apply(lambda r: SequenceMatcher(None, str(r['prediksi_4digit']).zfill(4), str(r['real_4digit']).zfill(4)).ratio(), axis=1).mean()
+
+# === GRAFIK TREN ===
+def plot_rolling_accuracy(df, window=20):
+    if df.empty:
         return None
+    df = df.copy()
+    df["correct"] = (df["prediksi_4digit"].astype(str) == df["real_4digit"].astype(str)).astype(int)
+    df["rolling_acc"] = df["correct"].rolling(window=window, min_periods=5).mean()
 
+    fig, ax = plt.subplots(figsize=(6,3))
+    ax.plot(df.index, df["rolling_acc"], label=f"Rolling {window}-window")
+    ax.set_title("Tren Akurasi Prediksi (Top-1)")
+    ax.set_xlabel("Prediksi ke-")
+    ax.set_ylabel("Akurasi")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    return fig
 
-def log_prediksi(sumber, prediksi, real, file_path):
-    """Simpan log prediksi ke file berbeda per sumber"""
-    status = "✅ Tepat" if prediksi == real else "❌ Meleset"
-    entry = {
-        "tanggal": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "sumber": sumber,
-        "prediksi_4digit": prediksi,
-        "real_4digit": real,
-        "status": status
-    }
+# === FUNGSI UTAMA UNTUK STREAMLIT ===
+def tampilkan_evaluasi(st, log_path="data/prediksi_log.csv"):
+    st.subheader("📈 Evaluasi Kinerja Model Historis")
 
-    if os.path.exists(file_path):
-        df = pd.read_csv(file_path)
-        df = pd.concat([df, pd.DataFrame([entry])], ignore_index=True)
-    else:
-        df = pd.DataFrame([entry])
+    df = load_log(log_path)
+    if df.empty:
+        st.info("Belum ada data prediksi yang tersimpan untuk evaluasi.")
+        return
 
-    df.to_csv(file_path, index=False)
+    exact = exact_match_rate(df)
+    perpos = per_position_accuracy(df)
+    sim = avg_similarity(df)
 
+    st.markdown(f"**🎯 Top-1 Exact Match:** {exact:.2%}")
+    st.markdown(f"**🧩 Rata-rata Kemiripan (Sequence):** {sim:.2%}")
 
-def ambil_riwayat(file_path, n=5):
-    if not os.path.exists(file_path):
-        return None
-    df = pd.read_csv(file_path)
-    return df.tail(n)
+    st.markdown("**📊 Akurasi per Digit:**")
+    for pos, val in perpos.items():
+        st.markdown(f"- {pos.upper()}: {val:.2%}")
 
-
-def riwayat_markov(data, order=2, top_k=1, alpha=1.0, langkah=5, model_func=None):
-    """Simulasi mundur sebanyak `langkah` riwayat untuk menilai akurasi prediksi belakang."""
-    if not data or len(data) < order + 2 or model_func is None:
-        return None
-
-    records = []
-    total = min(langkah, len(data) - order - 1)
-
-    for i in range(total):
-        train_data = data[:-(i+1)]
-        real_data = data[-(i+1)]
-
-        preds = model_func(train_data, order=order, top_k=top_k, alpha=alpha)
-        if preds:
-            pred = preds[0]
-            status = "ok ✅" if pred[-2:] == real_data[-2:] else "x ❌"
-            records.append({
-                "No": i + 1,
-                "Prediksi": pred,
-                "Real": real_data,
-                "Status": status
-            })
-
-    return pd.DataFrame(records)
+    fig = plot_rolling_accuracy(df)
+    if fig:
+        st.pyplot(fig)
