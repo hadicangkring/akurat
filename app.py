@@ -3,17 +3,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from datetime import datetime
-import os
-from eval_utils import tampilkan_evaluasi  # Modul evaluasi
+from itertools import product
 
 # === SETUP PAGE ===
-st.set_page_config(page_title="🔢 Sistem Prediksi Angka — Markov Fusion Deluxe", layout="centered")
-st.title("🔢 Sistem Prediksi Angka — Markov Fusion Deluxe")
-st.caption("Model Markov Orde-2 dengan integrasi Hari, Pasaran, dan sistem evaluasi historis.")
+st.set_page_config(page_title="🔢 Markov Fusion Deluxe v2", layout="centered")
+st.title("🔢 Markov Fusion Deluxe v2 — Fusion China & Jawa Calendar")
+st.caption("Model Markov Orde-2 dengan prediksi per posisi digit dan kombinasi angka terkuat.")
 
-# === PARAMETER MANUAL ===
+# === PARAMETER ===
 alpha = st.slider("Laplace α", 0.0, 2.0, 1.0, 0.1)
-beam_width = st.slider("Beam Width", 3, 50, 10, 1)
 top_k = st.slider("Top-K Prediksi", 1, 10, 5, 1)
 
 # === KONVERSI HARI JAWA ===
@@ -22,7 +20,8 @@ def hari_jawa(tanggal):
     pasaran = ["Legi", "Pahing", "Pon", "Wage", "Kliwon"]
     neptu_hari = [4, 3, 7, 8, 6, 9, 5]
     neptu_pasaran = [5, 9, 7, 4, 8]
-    idx_hari = tanggal.weekday()
+
+    idx_hari = tanggal.weekday()  # 0=Senin
     idx_pasaran = (tanggal.toordinal() + 3) % 5
     return f"{hari[idx_hari]} {pasaran[idx_pasaran]}", neptu_hari[idx_hari] + neptu_pasaran[idx_pasaran]
 
@@ -43,17 +42,17 @@ def baca_data(file_name):
                 val = val.strip().replace(",", "")
                 for part in val.split():
                     if part.isdigit():
-                        data.append(part.zfill(6))
+                        data.append(part.zfill(4))  # fokus 4 digit terakhir
         return data
     except Exception:
         return None
 
 # === MODEL MARKOV ORDE 2 ===
-def markov_order2_predict(data, top_k=5, alpha=1.0, beam_width=10):
-    if not data or len(data) < 3:
-        return []
+def markov_order2_probabilities(data, alpha=1.0):
+    """Bangun probabilitas transisi antar digit (orde 2)."""
     sequences = [list(x) for x in data]
     transitions = {}
+
     for seq in sequences:
         for i in range(len(seq) - 2):
             key = (seq[i], seq[i+1])
@@ -61,77 +60,115 @@ def markov_order2_predict(data, top_k=5, alpha=1.0, beam_width=10):
             if key not in transitions:
                 transitions[key] = {}
             transitions[key][next_digit] = transitions[key].get(next_digit, 0) + 1
+
+    # Normalisasi dengan Laplace smoothing
     for k in transitions:
         total = sum(transitions[k].values()) + 10 * alpha
         for d in map(str, range(10)):
             transitions[k][d] = (transitions[k].get(d, 0) + alpha) / total
+
+    return transitions
+
+def top5_digits(data, alpha=1.0):
+    """Prediksi top-5 digit untuk posisi ribuan, ratusan, puluhan, satuan."""
+    if not data or len(data) < 3:
+        return {}
+
+    transitions = markov_order2_probabilities(data, alpha)
     last = list(data[-1])
     state = (last[-2], last[-1])
-    preds = []
-    for _ in range(top_k):
-        seq = last[-4:]
-        for _ in range(2):
-            next_probs = transitions.get(state, None)
-            if not next_probs:
-                break
-            next_digit = max(next_probs, key=next_probs.get)
-            seq.append(next_digit)
-            state = (state[1], next_digit)
-        preds.append("".join(seq[-4:]))
-    return list(dict.fromkeys(preds))[:top_k]
 
-# === SIMPAN LOG PREDIKSI ===
-def simpan_log(prediksi, real, file_name="data/prediksi_log.csv"):
-    os.makedirs("data", exist_ok=True)
-    df = pd.DataFrame([{"timestamp": datetime.now(), "prediksi_4digit": prediksi, "real_4digit": real}])
-    if os.path.exists(file_name):
-        df.to_csv(file_name, mode="a", header=False, index=False)
-    else:
-        df.to_csv(file_name, index=False)
+    # Probabilitas digit berikut berdasarkan state terakhir
+    next_probs = transitions.get(state, {str(d): 1/10 for d in range(10)})
+    sorted_probs = sorted(next_probs.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    # Untuk kesederhanaan, gunakan pendekatan independen antar posisi
+    probs_by_pos = {}
+    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
+        counter = {str(d): 0 for d in range(10)}
+        for seq in data:
+            counter[seq[i]] += 1
+        total = sum(counter.values()) + 10 * alpha
+        probs = {d: (c + alpha) / total for d, c in counter.items()}
+        probs_by_pos[pos] = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    return probs_by_pos
+
+def top5_combinations(probs_by_pos):
+    """Hitung 5 kombinasi angka paling kuat dari distribusi posisi."""
+    all_combos = []
+    for combo in product(
+        [x[0] for x in probs_by_pos["Ribuan"]],
+        [x[0] for x in probs_by_pos["Ratusan"]],
+        [x[0] for x in probs_by_pos["Puluhan"]],
+        [x[0] for x in probs_by_pos["Satuan"]],
+    ):
+        p = 1
+        for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
+            d = combo[i]
+            p *= dict(probs_by_pos[pos])[d]
+        all_combos.append(("".join(combo), p))
+
+    return sorted(all_combos, key=lambda x: x[1], reverse=True)[:5]
 
 # === TAMPILKAN HASIL ===
 def tampilkan_prediksi(file_name, label, emoji):
     data = baca_data(file_name)
     st.subheader(f"{emoji} {label}")
+
     if not data:
         st.text("Tidak ada data valid.")
         return
+
     last_num = data[-1]
-    st.write(f"Angka terakhir sebelum prediksi adalah: **{last_num}**")
-    pred4 = markov_order2_predict(data, top_k=top_k, alpha=alpha, beam_width=beam_width)
-    pred2 = [x[-2:] for x in pred4]
-    st.markdown("**Prediksi 4 Digit (Top 5):**")
-    st.write(", ".join(pred4))
-    st.markdown("**Prediksi 2 Digit (Top 5):**")
-    st.write(", ".join(pred2))
+    st.markdown(f"🔹 Angka terakhir: **{last_num}**")
 
-    real_input = st.text_input(f"Masukkan hasil real terakhir untuk {label} (4 digit):", "")
-    if st.button(f"💾 Simpan ke log {label}"):
-        if real_input.strip().isdigit() and len(real_input.strip()) == 4:
-            simpan_log(pred4[0], real_input.strip(), "data/prediksi_log.csv")
-            st.success("✅ Tersimpan ke log evaluasi.")
-        else:
-            st.warning("Masukkan 4 digit angka valid.")
+    probs_by_pos = top5_digits(data, alpha)
+    if not probs_by_pos:
+        st.warning("Data tidak cukup untuk prediksi.")
+        return
 
-# === PREDIKSI PER FILE ===
+    st.markdown("### 📊 Top-5 Prediksi per Posisi Digit")
+    cols = st.columns(4)
+    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
+        with cols[i]:
+            st.markdown(f"**{pos}:**")
+            for d, p in probs_by_pos[pos]:
+                st.markdown(f"- {d} ({p:.2%})")
+
+    st.markdown("### 🔮 Top-5 Kombinasi Angka Terkuat")
+    combos = top5_combinations(probs_by_pos)
+    for c, p in combos:
+        st.markdown(f"**{c}** — {p:.2%}")
+
+# === JALANKAN UNTUK SETIAP FILE ===
 tampilkan_prediksi("data/a.csv", "File A", "📘")
 tampilkan_prediksi("data/b.csv", "File B", "📗")
 tampilkan_prediksi("data/c.csv", "File C", "📙")
 
-# === GABUNGAN ===
+# === GABUNGAN SEMUA DATA ===
 st.subheader("🧩 Gabungan Semua Data")
 data_a = baca_data("data/a.csv") or []
 data_b = baca_data("data/b.csv") or []
 data_c = baca_data("data/c.csv") or []
+
 gabungan = data_a + data_b + data_c
 if gabungan:
-    st.write(f"Angka terakhir sebelum prediksi gabungan: **{gabungan[-1]}**")
-    pred4_gab = markov_order2_predict(gabungan, top_k=top_k, alpha=alpha, beam_width=beam_width)
-    st.markdown("**Prediksi 4 Digit (Top 5 Gabungan):**")
-    st.write(", ".join(pred4_gab))
+    last_num = gabungan[-1]
+    st.markdown(f"🔹 Angka terakhir gabungan: **{last_num}**")
+
+    probs_by_pos = top5_digits(gabungan, alpha)
+    st.markdown("### 📊 Top-5 per Posisi Digit (Gabungan)")
+    cols = st.columns(4)
+    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
+        with cols[i]:
+            st.markdown(f"**{pos}:**")
+            for d, p in probs_by_pos[pos]:
+                st.markdown(f"- {d} ({p:.2%})")
+
+    st.markdown("### 🔮 Top-5 Kombinasi Angka Terkuat (Gabungan)")
+    combos = top5_combinations(probs_by_pos)
+    for c, p in combos:
+        st.markdown(f"**{c}** — {p:.2%}")
 else:
     st.text("Belum ada data valid dari file A/B/C.")
-
-# === EVALUASI HISTORIS ===
-st.divider()
-tampilkan_evaluasi(st, "data/prediksi_log.csv")
