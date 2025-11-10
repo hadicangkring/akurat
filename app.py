@@ -4,12 +4,12 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 import os
-from eval_utils import tampilkan_evaluasi  # <=== BARU
+from eval_utils import tampilkan_evaluasi  # Modul evaluasi
 
 # === SETUP PAGE ===
-st.set_page_config(page_title="🔢 Sistem Prediksi Angka — Fusion China & Jawa Calendar", layout="centered")
-st.title("🔢 Sistem Prediksi Angka — Fusion China & Jawa Calendar")
-st.caption("Model Markov Orde-2 dengan integrasi Hari, Pasaran, dan rencana Kalender Cina.")
+st.set_page_config(page_title="🔢 Sistem Prediksi Angka — Markov Fusion Deluxe", layout="centered")
+st.title("🔢 Sistem Prediksi Angka — Markov Fusion Deluxe")
+st.caption("Model Markov Orde-2 dengan integrasi Hari, Pasaran, dan sistem evaluasi historis.")
 
 # === PARAMETER MANUAL ===
 alpha = st.slider("Laplace α", 0.0, 2.0, 1.0, 0.1)
@@ -104,7 +104,7 @@ def tampilkan_prediksi(file_name, label, emoji):
     st.write(", ".join(pred4))
     st.markdown("**Prediksi 2 Digit (Top 5):**")
     st.write(", ".join(pred2))
-    # Simpan log prediksi terakhir
+
     real_input = st.text_input(f"Masukkan hasil real terakhir untuk {label} (4 digit):", "")
     if st.button(f"💾 Simpan ke log {label}"):
         if real_input.strip().isdigit() and len(real_input.strip()) == 4:
@@ -132,6 +132,6 @@ if gabungan:
 else:
     st.text("Belum ada data valid dari file A/B/C.")
 
-# === EVALUASI ===
+# === EVALUASI HISTORIS ===
 st.divider()
 tampilkan_evaluasi(st, "data/prediksi_log.csv")
