@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+from datetime import datetime
 
 def baca_data(file_path):
     if not os.path.exists(file_path):
@@ -20,6 +21,36 @@ def baca_data(file_path):
     except Exception:
         return None
 
-def log_activity(msg, file="activity.log"):
-    with open(file, "a", encoding="utf-8") as f:
-        f.write(msg + "\n")
+
+def log_prediksi(sumber, prediksi, real):
+    """
+    Menyimpan log hasil prediksi ke file prediksi_log.csv
+    """
+    file_path = "prediksi_log.csv"
+    status = "✅ Tepat" if prediksi == real else "❌ Meleset"
+    entry = {
+        "tanggal": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "sumber": sumber,
+        "prediksi_4digit": prediksi,
+        "real_4digit": real,
+        "status": status
+    }
+
+    if os.path.exists(file_path):
+        df = pd.read_csv(file_path)
+        df = pd.concat([df, pd.DataFrame([entry])], ignore_index=True)
+    else:
+        df = pd.DataFrame([entry])
+
+    df.to_csv(file_path, index=False)
+
+
+def ambil_riwayat(n=5):
+    """
+    Mengambil n riwayat terakhir dari prediksi_log.csv
+    """
+    file_path = "prediksi_log.csv"
+    if not os.path.exists(file_path):
+        return None
+    df = pd.read_csv(file_path)
+    return df.tail(n)
