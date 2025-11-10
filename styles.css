@@ -14,3 +14,14 @@ div[data-testid="stSidebar"] {
 h1, h2, h3 {
     color: #1e3a8a !important;
 }
+
+/* styling untuk tabel riwayat */
+[data-testid="stDataFrame"] table {
+    border-radius: 10px;
+    border: 1px solid #d1d5db;
+}
+[data-testid="stDataFrame"] thead {
+    background-color: #f1f5f9 !important;
+    color: #1e3a8a !important;
+    font-weight: bold;
+}
