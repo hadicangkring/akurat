@@ -47,3 +47,29 @@ def ambil_riwayat(file_path, n=5):
         return None
     df = pd.read_csv(file_path)
     return df.tail(n)
+
+
+def riwayat_markov(data, order=2, top_k=1, alpha=1.0, langkah=5, model_func=None):
+    """Simulasi mundur sebanyak `langkah` riwayat untuk menilai akurasi prediksi belakang."""
+    if not data or len(data) < order + 2 or model_func is None:
+        return None
+
+    records = []
+    total = min(langkah, len(data) - order - 1)
+
+    for i in range(total):
+        train_data = data[:-(i+1)]
+        real_data = data[-(i+1)]
+
+        preds = model_func(train_data, order=order, top_k=top_k, alpha=alpha)
+        if preds:
+            pred = preds[0]
+            status = "ok ✅" if pred[-2:] == real_data[-2:] else "x ❌"
+            records.append({
+                "No": i + 1,
+                "Prediksi": pred,
+                "Real": real_data,
+                "Status": status
+            })
+
+    return pd.DataFrame(records)
