@@ -6,9 +6,9 @@ from datetime import datetime
 from itertools import product
 
 # === PAGE SETUP ===
-st.set_page_config(page_title="🎯 Markov Fusion 2D v2.2", layout="centered")
-st.title("🎯 Markov Fusion 2D v2.2 — Fokus Puluhan & Satuan")
-st.caption("Analisis Markov Orde-2 dengan fokus prediksi dua digit terakhir (2D).")
+st.set_page_config(page_title="🎯 Markov Fusion 2D v2.3", layout="centered")
+st.title("🎯 Markov Fusion 2D v2.3 — Fokus Puluhan & Satuan")
+st.caption("Prediksi berbasis Markov Orde-2 dengan fokus dua digit terakhir (2D).")
 
 # === PARAMETER ===
 alpha = st.slider("Laplace α", 0.0, 2.0, 1.0, 0.1)
@@ -41,12 +41,12 @@ def baca_data(file_name):
                 val = val.strip().replace(",", "")
                 for part in val.split():
                     if part.isdigit():
-                        data.append(part.zfill(4))  # tetap 4 digit untuk stabilitas
+                        data.append(part.zfill(4))  # 4 digit agar seragam
         return data
     except Exception:
         return None
 
-# === MODEL MARKOV ORDE 2 ===
+# === MARKOV PROBABILITIES ===
 def markov_order2_probabilities(data, alpha=1.0):
     transitions = {}
     for seq in data:
@@ -62,15 +62,14 @@ def markov_order2_probabilities(data, alpha=1.0):
             transitions[k][d] = (transitions[k].get(d, 0) + alpha) / total
     return transitions
 
-# === TOP 3 DIGIT UNTUK 2D ===
+# === HITUNG TOP DIGIT 2D ===
 def top_digits_2d(data, alpha=1.0, top_n=3):
     """Prediksi top-N digit untuk posisi Puluhan & Satuan saja."""
     if not data:
         return {}
-
     positions = ["Puluhan", "Satuan"]
     probs_by_pos = {}
-    for i, pos in enumerate([-2, -1]):  # ambil 2 digit terakhir
+    for i, pos in enumerate([-2, -1]):
         counter = {str(d): 0 for d in range(10)}
         for seq in data:
             counter[seq[pos]] += 1
@@ -79,7 +78,7 @@ def top_digits_2d(data, alpha=1.0, top_n=3):
         probs_by_pos[positions[i]] = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:top_n]
     return probs_by_pos
 
-# === TOP 5 KOMBINASI 2D ===
+# === KOMBINASI TERKUAT ===
 def top_combinations_2d(probs_by_pos, top_k=5):
     all_combos = []
     for combo in product(
@@ -94,7 +93,6 @@ def top_combinations_2d(probs_by_pos, top_k=5):
 def tampilkan_prediksi(file_name, label, emoji):
     data = baca_data(file_name)
     st.subheader(f"{emoji} {label}")
-
     if not data:
         st.text("Tidak ada data valid.")
         return
@@ -107,7 +105,7 @@ def tampilkan_prediksi(file_name, label, emoji):
         st.warning("Data tidak cukup untuk prediksi.")
         return
 
-    # Tampilkan top-3 per posisi (2D)
+    # === TOP-3 PREDIKSI PER POSISI (Puluhan & Satuan) ===
     st.markdown("### 📊 Top-3 Prediksi per Posisi (Puluhan & Satuan)")
     cols = st.columns(2)
     for i, pos in enumerate(["Puluhan", "Satuan"]):
@@ -116,7 +114,7 @@ def tampilkan_prediksi(file_name, label, emoji):
             for d, p in probs_by_pos[pos]:
                 st.markdown(f"- {d} ({p:.2%})")
 
-    # Tampilkan top kombinasi 2D terkuat
+    # === TOP-5 KOMBINASI TERKUAT ===
     st.markdown("### 🔮 Top-5 Kombinasi 2D Terkuat")
     combos = top_combinations_2d(probs_by_pos, top_k)
     for c, p in combos:
@@ -137,8 +135,8 @@ gabungan = data_a + data_b + data_c
 if gabungan:
     last_num = gabungan[-1]
     st.markdown(f"🔹 Angka terakhir gabungan: **{last_num}**")
-
     probs_by_pos = top_digits_2d(gabungan, alpha, top_n=3)
+
     st.markdown("### 📊 Top-3 per Posisi (Gabungan 2D)")
     cols = st.columns(2)
     for i, pos in enumerate(["Puluhan", "Satuan"]):
