@@ -6,9 +6,9 @@ from datetime import datetime
 from itertools import product
 
 # === SETUP PAGE ===
-st.set_page_config(page_title="🔢 Markov Fusion Deluxe v2.1", layout="centered")
-st.title("🔢 Markov Fusion Deluxe v2.1 — Fusion China & Jawa Calendar")
-st.caption("Model Markov Orde-2 dengan prediksi per posisi digit dan kombinasi angka terkuat.")
+st.set_page_config(page_title="🔢 Markov Fusion Deluxe v2.2", layout="centered")
+st.title("🔢 Markov Fusion Deluxe v2.2 — Fusion China & Jawa Calendar")
+st.caption("Model Markov Orde-2 dengan fokus prediksi 2D (Puluhan & Satuan) dan kombinasi angka terkuat.")
 
 # === PARAMETER ===
 alpha = st.slider("Laplace α", 0.0, 2.0, 1.0, 0.1)
@@ -69,7 +69,7 @@ def markov_order2_probabilities(data, alpha=1.0):
     return transitions
 
 def top_digits_per_position(data, alpha=1.0, top_n=3):
-    """Prediksi top-N digit untuk tiap posisi (ribuan, ratusan, puluhan, satuan)."""
+    """Prediksi top-N digit untuk tiap posisi digit (ribuan, ratusan, puluhan, satuan)."""
     if not data or len(data) < 3:
         return {}
 
@@ -118,16 +118,16 @@ def tampilkan_prediksi(file_name, label, emoji):
         st.warning("Data tidak cukup untuk prediksi.")
         return
 
-    # Tampilkan top 3 per posisi
-    st.markdown("### 📊 Top-3 Prediksi per Posisi Digit")
-    cols = st.columns(4)
-    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
+    # === 🧮 Fokus hanya pada Top-2D (Puluhan & Satuan) ===
+    st.markdown("### 🎯 Top-2D Prediksi (Puluhan & Satuan)")
+    cols = st.columns(2)
+    for i, pos in enumerate(["Puluhan", "Satuan"]):
         with cols[i]:
             st.markdown(f"**{pos}:**")
             for d, p in probs_by_pos[pos]:
                 st.markdown(f"- {d} ({p:.2%})")
 
-    # Tampilkan top kombinasi terkuat
+    # === 🔮 Top-5 Kombinasi Angka Terkuat ===
     st.markdown("### 🔮 Top-5 Kombinasi Angka Terkuat")
     combos = top5_combinations(probs_by_pos, top_k)
     for c, p in combos:
@@ -150,9 +150,9 @@ if gabungan:
     st.markdown(f"🔹 Angka terakhir gabungan: **{last_num}**")
 
     probs_by_pos = top_digits_per_position(gabungan, alpha, top_n=3)
-    st.markdown("### 📊 Top-3 per Posisi Digit (Gabungan)")
-    cols = st.columns(4)
-    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
+    st.markdown("### 🎯 Top-2D Prediksi (Puluhan & Satuan) — Gabungan")
+    cols = st.columns(2)
+    for i, pos in enumerate(["Puluhan", "Satuan"]):
         with cols[i]:
             st.markdown(f"**{pos}:**")
             for d, p in probs_by_pos[pos]:
