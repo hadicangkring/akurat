@@ -6,9 +6,9 @@ from datetime import datetime
 from itertools import product
 
 # === SETUP PAGE ===
-st.set_page_config(page_title="🔢 Markov Fusion Deluxe v2.2", layout="centered")
-st.title("🔢 Markov Fusion Deluxe v2.2 — Fusion China & Jawa Calendar")
-st.caption("Model Markov Orde-2 dengan fokus prediksi 2D (Puluhan & Satuan) dan kombinasi angka terkuat.")
+st.set_page_config(page_title="🔢 Markov Fusion Deluxe v2.3", layout="centered")
+st.title("🔢 Markov Fusion Deluxe v2.3 — Fusion China & Jawa Calendar")
+st.caption("Prediksi Markov Orde-2 fokus pada 2D potensial dan kombinasi angka terkuat.")
 
 # === PARAMETER ===
 alpha = st.slider("Laplace α", 0.0, 2.0, 1.0, 0.1)
@@ -68,8 +68,8 @@ def markov_order2_probabilities(data, alpha=1.0):
 
     return transitions
 
-def top_digits_per_position(data, alpha=1.0, top_n=3):
-    """Prediksi top-N digit untuk tiap posisi digit (ribuan, ratusan, puluhan, satuan)."""
+def top_digits_per_position(data, alpha=1.0):
+    """Hitung distribusi probabilitas tiap posisi (ribuan, ratusan, puluhan, satuan)."""
     if not data or len(data) < 3:
         return {}
 
@@ -81,25 +81,44 @@ def top_digits_per_position(data, alpha=1.0, top_n=3):
             counter[seq[i]] += 1
         total = sum(counter.values()) + 10 * alpha
         probs = {d: (c + alpha) / total for d, c in counter.items()}
-        probs_by_pos[pos] = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        probs_by_pos[pos] = probs
     return probs_by_pos
 
 def top5_combinations(probs_by_pos, top_k=5):
     """Hitung kombinasi angka paling kuat berdasarkan probabilitas posisi."""
     all_combos = []
     for combo in product(
-        [x[0] for x in probs_by_pos["Ribuan"]],
-        [x[0] for x in probs_by_pos["Ratusan"]],
-        [x[0] for x in probs_by_pos["Puluhan"]],
-        [x[0] for x in probs_by_pos["Satuan"]],
+        [x for x in probs_by_pos["Ribuan"]],
+        [x for x in probs_by_pos["Ratusan"]],
+        [x for x in probs_by_pos["Puluhan"]],
+        [x for x in probs_by_pos["Satuan"]],
     ):
         p = 1
         for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
             d = combo[i]
-            p *= dict(probs_by_pos[pos])[d]
+            p *= probs_by_pos[pos][d]
         all_combos.append(("".join(combo), p))
 
     return sorted(all_combos, key=lambda x: x[1], reverse=True)[:top_k]
+
+def generate_2d_table(probs_by_pos):
+    """Bangun tabel 2D (Puluhan, Satuan) berdasarkan probabilitas gabungan."""
+    puluhan = probs_by_pos["Puluhan"]
+    satuan = probs_by_pos["Satuan"]
+
+    combos = []
+    for d1, p1 in puluhan.items():
+        for d2, p2 in satuan.items():
+            combos.append((f"{d1}{d2}", p1 * p2))
+
+    combos_sorted = sorted(combos, key=lambda x: x[1], reverse=True)
+
+    # Kategori: Tinggi (Top 10), Sedang (Next 10), Rendah (Next 10)
+    high = combos_sorted[:10]
+    medium = combos_sorted[10:20]
+    low = combos_sorted[20:30]
+
+    return high, medium, low
 
 # === TAMPILKAN HASIL ===
 def tampilkan_prediksi(file_name, label, emoji):
@@ -113,19 +132,28 @@ def tampilkan_prediksi(file_name, label, emoji):
     last_num = data[-1]
     st.markdown(f"🔹 Angka terakhir: **{last_num}**")
 
-    probs_by_pos = top_digits_per_position(data, alpha, top_n=3)
+    probs_by_pos = top_digits_per_position(data, alpha)
     if not probs_by_pos:
         st.warning("Data tidak cukup untuk prediksi.")
         return
 
-    # === 🧮 Fokus hanya pada Top-2D (Puluhan & Satuan) ===
-    st.markdown("### 🎯 Top-2D Prediksi (Puluhan & Satuan)")
-    cols = st.columns(2)
-    for i, pos in enumerate(["Puluhan", "Satuan"]):
-        with cols[i]:
-            st.markdown(f"**{pos}:**")
-            for d, p in probs_by_pos[pos]:
-                st.markdown(f"- {d} ({p:.2%})")
+    # === 🎯 TABEL 2D POTENSIAL ===
+    st.markdown("### 🎯 Tabel 2D Potensial")
+    high, medium, low = generate_2d_table(probs_by_pos)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**🔥 Potensial Tinggi**")
+        for d, p in high:
+            st.markdown(f"- {d} — {p:.2%}")
+    with col2:
+        st.markdown("**⚖️ Potensial Sedang**")
+        for d, p in medium:
+            st.markdown(f"- {d} — {p:.2%}")
+    with col3:
+        st.markdown("**💤 Potensial Rendah**")
+        for d, p in low:
+            st.markdown(f"- {d} — {p:.2%}")
 
     # === 🔮 Top-5 Kombinasi Angka Terkuat ===
     st.markdown("### 🔮 Top-5 Kombinasi Angka Terkuat")
@@ -149,14 +177,23 @@ if gabungan:
     last_num = gabungan[-1]
     st.markdown(f"🔹 Angka terakhir gabungan: **{last_num}**")
 
-    probs_by_pos = top_digits_per_position(gabungan, alpha, top_n=3)
-    st.markdown("### 🎯 Top-2D Prediksi (Puluhan & Satuan) — Gabungan")
-    cols = st.columns(2)
-    for i, pos in enumerate(["Puluhan", "Satuan"]):
-        with cols[i]:
-            st.markdown(f"**{pos}:**")
-            for d, p in probs_by_pos[pos]:
-                st.markdown(f"- {d} ({p:.2%})")
+    probs_by_pos = top_digits_per_position(gabungan, alpha)
+    st.markdown("### 🎯 Tabel 2D Potensial — Gabungan")
+    high, medium, low = generate_2d_table(probs_by_pos)
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**🔥 Potensial Tinggi**")
+        for d, p in high:
+            st.markdown(f"- {d} — {p:.2%}")
+    with col2:
+        st.markdown("**⚖️ Potensial Sedang**")
+        for d, p in medium:
+            st.markdown(f"- {d} — {p:.2%}")
+    with col3:
+        st.markdown("**💤 Potensial Rendah**")
+        for d, p in low:
+            st.markdown(f"- {d} — {p:.2%}")
 
     st.markdown("### 🔮 Top-5 Kombinasi Angka Terkuat (Gabungan)")
     combos = top5_combinations(probs_by_pos, top_k)
