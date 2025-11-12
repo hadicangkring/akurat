@@ -5,16 +5,16 @@ import numpy as np
 from datetime import datetime
 from itertools import product
 
-# === PAGE SETUP ===
-st.set_page_config(page_title="🎯 Markov Fusion 2D v2.3", layout="centered")
-st.title("🎯 Markov Fusion 2D v2.3 — Fokus Puluhan & Satuan")
-st.caption("Prediksi berbasis Markov Orde-2 dengan fokus dua digit terakhir (2D).")
+# === SETUP PAGE ===
+st.set_page_config(page_title="🔢 Markov Fusion Deluxe v2.1", layout="centered")
+st.title("🔢 Markov Fusion Deluxe v2.1 — Fusion China & Jawa Calendar")
+st.caption("Model Markov Orde-2 dengan prediksi per posisi digit dan kombinasi angka terkuat.")
 
 # === PARAMETER ===
 alpha = st.slider("Laplace α", 0.0, 2.0, 1.0, 0.1)
-top_k = st.slider("Top-K Kombinasi 2D", 1, 10, 5, 1)
+top_k = st.slider("Top-K Kombinasi", 1, 10, 5, 1)
 
-# === HARI JAWA ===
+# === KONVERSI HARI JAWA ===
 def hari_jawa(tanggal):
     hari = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"]
     pasaran = ["Legi", "Pahing", "Pon", "Wage", "Kliwon"]
@@ -41,58 +41,71 @@ def baca_data(file_name):
                 val = val.strip().replace(",", "")
                 for part in val.split():
                     if part.isdigit():
-                        data.append(part.zfill(4))  # 4 digit agar seragam
+                        data.append(part.zfill(4))  # fokus 4 digit
         return data
     except Exception:
         return None
 
-# === MARKOV PROBABILITIES ===
+# === MODEL MARKOV ORDE 2 ===
 def markov_order2_probabilities(data, alpha=1.0):
+    """Bangun probabilitas transisi antar digit (orde 2)."""
+    sequences = [list(x) for x in data]
     transitions = {}
-    for seq in data:
+
+    for seq in sequences:
         for i in range(len(seq) - 2):
             key = (seq[i], seq[i+1])
-            nxt = seq[i+2]
+            next_digit = seq[i+2]
             if key not in transitions:
                 transitions[key] = {}
-            transitions[key][nxt] = transitions[key].get(nxt, 0) + 1
+            transitions[key][next_digit] = transitions[key].get(next_digit, 0) + 1
+
+    # Normalisasi + Laplace smoothing
     for k in transitions:
         total = sum(transitions[k].values()) + 10 * alpha
         for d in map(str, range(10)):
             transitions[k][d] = (transitions[k].get(d, 0) + alpha) / total
+
     return transitions
 
-# === HITUNG TOP DIGIT 2D ===
-def top_digits_2d(data, alpha=1.0, top_n=3):
-    """Prediksi top-N digit untuk posisi Puluhan & Satuan saja."""
-    if not data:
+def top_digits_per_position(data, alpha=1.0, top_n=3):
+    """Prediksi top-N digit untuk tiap posisi (ribuan, ratusan, puluhan, satuan)."""
+    if not data or len(data) < 3:
         return {}
-    positions = ["Puluhan", "Satuan"]
+
+    transitions = markov_order2_probabilities(data, alpha)
     probs_by_pos = {}
-    for i, pos in enumerate([-2, -1]):
+    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
         counter = {str(d): 0 for d in range(10)}
         for seq in data:
-            counter[seq[pos]] += 1
+            counter[seq[i]] += 1
         total = sum(counter.values()) + 10 * alpha
         probs = {d: (c + alpha) / total for d, c in counter.items()}
-        probs_by_pos[positions[i]] = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:top_n]
+        probs_by_pos[pos] = sorted(probs.items(), key=lambda x: x[1], reverse=True)[:top_n]
     return probs_by_pos
 
-# === KOMBINASI TERKUAT ===
-def top_combinations_2d(probs_by_pos, top_k=5):
+def top5_combinations(probs_by_pos, top_k=5):
+    """Hitung kombinasi angka paling kuat berdasarkan probabilitas posisi."""
     all_combos = []
     for combo in product(
+        [x[0] for x in probs_by_pos["Ribuan"]],
+        [x[0] for x in probs_by_pos["Ratusan"]],
         [x[0] for x in probs_by_pos["Puluhan"]],
         [x[0] for x in probs_by_pos["Satuan"]],
     ):
-        p = dict(probs_by_pos["Puluhan"])[combo[0]] * dict(probs_by_pos["Satuan"])[combo[1]]
+        p = 1
+        for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
+            d = combo[i]
+            p *= dict(probs_by_pos[pos])[d]
         all_combos.append(("".join(combo), p))
+
     return sorted(all_combos, key=lambda x: x[1], reverse=True)[:top_k]
 
 # === TAMPILKAN HASIL ===
 def tampilkan_prediksi(file_name, label, emoji):
     data = baca_data(file_name)
     st.subheader(f"{emoji} {label}")
+
     if not data:
         st.text("Tidak ada data valid.")
         return
@@ -100,53 +113,53 @@ def tampilkan_prediksi(file_name, label, emoji):
     last_num = data[-1]
     st.markdown(f"🔹 Angka terakhir: **{last_num}**")
 
-    probs_by_pos = top_digits_2d(data, alpha, top_n=3)
+    probs_by_pos = top_digits_per_position(data, alpha, top_n=3)
     if not probs_by_pos:
         st.warning("Data tidak cukup untuk prediksi.")
         return
 
-    # === TOP-3 PREDIKSI PER POSISI (Puluhan & Satuan) ===
-    st.markdown("### 📊 Top-3 Prediksi per Posisi (Puluhan & Satuan)")
-    cols = st.columns(2)
-    for i, pos in enumerate(["Puluhan", "Satuan"]):
+    # Tampilkan top 3 per posisi
+    st.markdown("### 📊 Top-3 Prediksi per Posisi Digit")
+    cols = st.columns(4)
+    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
         with cols[i]:
             st.markdown(f"**{pos}:**")
             for d, p in probs_by_pos[pos]:
                 st.markdown(f"- {d} ({p:.2%})")
 
-    # === TOP-5 KOMBINASI TERKUAT ===
-    st.markdown("### 🔮 Top-5 Kombinasi 2D Terkuat")
-    combos = top_combinations_2d(probs_by_pos, top_k)
+    # Tampilkan top kombinasi terkuat
+    st.markdown("### 🔮 Top-5 Kombinasi Angka Terkuat")
+    combos = top5_combinations(probs_by_pos, top_k)
     for c, p in combos:
         st.markdown(f"**{c}** — {p:.2%}")
 
 # === JALANKAN UNTUK SETIAP FILE ===
-tampilkan_prediksi("data/a.csv", "File A", "📘")
-tampilkan_prediksi("data/b.csv", "File B", "📗")
-tampilkan_prediksi("data/c.csv", "File C", "📙")
+tampilkan_prediksi("data/a.csv", "File A-SD", "📘")
+tampilkan_prediksi("data/b.csv", "File B-SG", "📗")
+tampilkan_prediksi("data/c.csv", "File C-HK", "📙")
 
 # === GABUNGAN SEMUA DATA ===
 st.subheader("🧩 Gabungan Semua Data")
 data_a = baca_data("data/a.csv") or []
 data_b = baca_data("data/b.csv") or []
 data_c = baca_data("data/c.csv") or []
-gabungan = data_a + data_b + data_c
 
+gabungan = data_a + data_b + data_c
 if gabungan:
     last_num = gabungan[-1]
     st.markdown(f"🔹 Angka terakhir gabungan: **{last_num}**")
-    probs_by_pos = top_digits_2d(gabungan, alpha, top_n=3)
 
-    st.markdown("### 📊 Top-3 per Posisi (Gabungan 2D)")
-    cols = st.columns(2)
-    for i, pos in enumerate(["Puluhan", "Satuan"]):
+    probs_by_pos = top_digits_per_position(gabungan, alpha, top_n=3)
+    st.markdown("### 📊 Top-3 per Posisi Digit (Gabungan)")
+    cols = st.columns(4)
+    for i, pos in enumerate(["Ribuan", "Ratusan", "Puluhan", "Satuan"]):
         with cols[i]:
             st.markdown(f"**{pos}:**")
             for d, p in probs_by_pos[pos]:
                 st.markdown(f"- {d} ({p:.2%})")
 
-    st.markdown("### 🔮 Top-5 Kombinasi 2D Terkuat (Gabungan)")
-    combos = top_combinations_2d(probs_by_pos, top_k)
+    st.markdown("### 🔮 Top-5 Kombinasi Angka Terkuat (Gabungan)")
+    combos = top5_combinations(probs_by_pos, top_k)
     for c, p in combos:
         st.markdown(f"**{c}** — {p:.2%}")
 else:
